@@ -5,6 +5,8 @@ import uuid
 import msgpack
 import time
 import os
+import subprocess
+import re
 
 __author__ = "Piotr Gawlowicz"
 __copyright__ = "Copyright (c) 2015, Technische Universitat Berlin"
@@ -21,6 +23,7 @@ class Agent(object):
         self.myName = "node-123"
 
         self.bnInterface = bnInterface
+        self.qDiscConifg = None
 
         self.connectedToController = False
         self.controllerDL = controllerDL
@@ -60,9 +63,10 @@ class Agent(object):
         msg = msgpack.packb({'uuid':self.myUuidStr, 'reason':'Agent_Process_Exit'})
         self.ul_socket.send("%s %s %s" % (topic, cmd, msg))
 
-    def setup_qdisc_for_bn_int(self, qdisc_config):
+    def install_egress_scheduler(self, qdisc_config):
         self.log.debug("Configure Qdisc".format())
 
+        self.qDiscConifg = qdisc_config
         interface = self.bnInterface
 
         rootQdisc = qdisc_config["root"]
@@ -139,6 +143,40 @@ class Agent(object):
 
         self.log.debug("Qdisc setup completed".format())
 
+    def set_channel(self, msg):
+        channel = msg
+        self.log.debug("Set channel {}".format(channel))
+
+        interface = self.bnInterface
+
+        #TODO: set channel for BN interface
+        self.log.debug("Configure new channel {} for interface: {}".format(channel, interface))
+
+    def monitor_transmission_parameters(self, msg):
+        self.log.debug("Monitoring interface {}, parameters: {}".format(self.bnInterface, msg))
+        parameters = msg["parameters"]
+
+        result = {}
+        if "droppedPackets" in parameters:
+            qdiscId = 1
+            droppedPackets = []
+            cmd = ['/sbin/tc','-s','-d', 'qdisc', 'show', 'dev', self.bnInterface]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+            lines_iterator = iter(process.stdout.readline, b"")
+            for line in lines_iterator:
+                if "dropped" in line:
+                    numbers = re.findall(r'\d+', line)
+                    droppedPackets.append({"qdiscId": qdiscId, "droppedPkts" : numbers[2]})
+                    qdiscId += 1
+            result["droppedPackets"] = droppedPackets
+
+        #send response to controller
+        self.log.debug("Send monitoring result to controller".format())
+
+        topic = self.myUuidStr
+        cmd = 'monitor_transmission_parameters_response'
+        msg = msgpack.packb(result)
+        self.ul_socket.send("%s %s %s" % (topic, cmd, msg))
 
     def process_msgs(self):
         # Work on requests from controller
@@ -147,12 +185,16 @@ class Agent(object):
 
             if self.dl_socket in socks and socks[self.dl_socket] == zmq.POLLIN:
                 msg = self.dl_socket.recv()
-                topic, cmd, msg = msg.split()
+                topic, cmd, msg = msg.split(" ")
                 msg = msgpack.unpackb(msg)
-                self.log.debug("Agent received msg : {} on topic {}".format(msg, topic))
+                self.log.debug("Agent received cmd : {} on topic {}".format(cmd, topic))
 
-                if cmd == "configure_qdisc_for_bn_int":
-                    self.setup_qdisc_for_bn_int(msg)
+                if cmd == "install_egress_scheduler":
+                    self.install_egress_scheduler(msg)
+                elif cmd == "set_channel":
+                    self.set_channel(msg)
+                elif cmd == "monitor_transmission_parameters":
+                    self.monitor_transmission_parameters(msg)
                 else:
                     self.log.debug("Operation not supported")
 

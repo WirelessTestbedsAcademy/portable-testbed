@@ -29,6 +29,7 @@ class Controller(object):
         self.nodes = []
 
         self.qdisc_config = None
+        self.bnChannel = 11
 
         self.echoMsgInterval = 3
         self.echoTimeOut = 10
@@ -37,6 +38,7 @@ class Controller(object):
         self.poller = zmq.Poller()
 
         self.ul_socket = self.context.socket(zmq.SUB) # one SUB socket for uplink communication over topics
+        self.ul_socket.setsockopt(zmq.SUBSCRIBE,  "ALL")
         self.ul_socket.setsockopt(zmq.SUBSCRIBE,  "NEW_NODE")
         self.ul_socket.setsockopt(zmq.SUBSCRIBE,  "NODE_EXIT")
         self.ul_socket.setsockopt(zmq.SUBSCRIBE,  "RESPONSE")
@@ -53,6 +55,11 @@ class Controller(object):
         self.log.debug("Adding new node with UUID: {} and Name: {}".format(msg['uuid'], msg['name']))
         newNode = Node(msg['uuid'], msg['name'])
         self.nodes.append(newNode)
+
+        #subscribe to node UUID
+        self.ul_socket.setsockopt(zmq.SUBSCRIBE,  newNode.uuid)
+        time.sleep(1)
+
         return newNode
 
 
@@ -149,7 +156,7 @@ class Controller(object):
         self.qdisc_config = qdiscConfig
 
 
-    def send_qdisc_config(self, node):
+    def install_egress_scheduler(self, node):
         self.log.debug("Sending QDisc config to node with UUID: {}".format(node.uuid))
 
         if not self.qdisc_config:
@@ -157,9 +164,29 @@ class Controller(object):
 
         #send QDisc configuration to agent
         topic = node.uuid
-        cmd = "configure_qdisc_for_bn_int"
+        cmd = "install_egress_scheduler"
         msg = msgpack.packb(self.qdisc_config.serialize())
         self.dl_socket.send("%s %s %s" % (topic, cmd, msg))
+
+    def set_channel(self, node, channel):
+        self.log.debug("Set channel {} to node with UUID: {}".format(channel, node.uuid))
+
+        topic = node.uuid
+        cmd = "set_channel"
+        msg = msgpack.packb(channel)
+        self.dl_socket.send("%s %s %s" % (topic, cmd, msg))
+
+    def monitor_transmission_parameters(self, node):
+        self.log.debug("Monitor transmission parameters of BN interface in node with UUID: {}".format(node.uuid))
+
+        topic = node.uuid
+        cmd = "monitor_transmission_parameters"
+        msg = {"parameters" : ["droppedPackets"]}
+        msg = msgpack.packb(msg)
+        self.dl_socket.send("%s %s %s" % (topic, cmd, msg))
+
+    def monitor_transmission_parameters_response(self, msg):
+        self.log.debug("Monitor transmission parameters response : {}".format(msg))
 
     def process_msgs(self):
         while True:
@@ -169,12 +196,16 @@ class Controller(object):
                 msg = self.ul_socket.recv()
                 topic, cmd, msg = msg.split()
                 msg = msgpack.unpackb(msg)
-                self.log.debug("Controller received msg : {} on topic {}".format(msg, topic))
+                self.log.debug("Controller received cmd : {} on topic {}".format(cmd, topic))
                 if topic == "NEW_NODE":
                     node = self.add_new_node(msg)
-                    self.send_qdisc_config(node)
+                    self.install_egress_scheduler(node)
+                    self.set_channel(node, self.bnChannel)
+                    self.monitor_transmission_parameters(node)
                 elif topic == "NODE_EXIT":
                     self.remove_node(msg)
+                elif cmd == "monitor_transmission_parameters_response":
+                    self.monitor_transmission_parameters_response(msg)
                 else:
                     self.log.debug("Operation not supported")
 
