@@ -4,9 +4,11 @@ import zmq
 import uuid
 import msgpack
 import time
+import datetime
 import os
 import subprocess
 import re
+from apscheduler.schedulers.background import BackgroundScheduler
 
 __author__ = "Piotr Gawlowicz"
 __copyright__ = "Copyright (c) 2015, Technische Universitat Berlin"
@@ -25,16 +27,26 @@ class Agent(object):
         self.bnInterface = bnInterface
         self.qDiscConifg = None
 
+        self.jobScheduler = BackgroundScheduler()
+        self.jobScheduler.start()
+        apscheduler_logger = logging.getLogger('apscheduler')
+        apscheduler_logger.setLevel(logging.CRITICAL)
+
         self.connectedToController = False
         self.controllerDL = controllerDL
         self.controllerUL = controllerUL
+        self.reconnectionJob = None
+        self.connectionRequestSent = False
 
         self.echoMsgInterval = 3
         self.echoTimeOut = 10
+        self.echoSendJob = None
+        self.connectionLostJob = None 
 
         self.poller = zmq.Poller()
         self.context = zmq.Context()
         self.dl_socket = self.context.socket(zmq.SUB) # for downlink communication with controller
+        self.dl_socket.setsockopt(zmq.SUBSCRIBE,  "ALL")
         self.dl_socket.setsockopt(zmq.SUBSCRIBE,  self.myUuidStr)
         self.ul_socket = self.context.socket(zmq.PUB) # for uplink communication with controller
 
@@ -44,6 +56,14 @@ class Agent(object):
 
     def connectToController(self):
         self.log.debug("Agent connects controller: DL:{0}, UL:{1}".format(self.controllerDL, self.controllerUL))
+
+        if self.connectionRequestSent:
+            try:
+                self.dl_socket.disconnect(self.controllerDL)
+                self.ul_socket.disconnect(self.controllerUL)
+            except:
+                pass
+
         self.dl_socket.connect(self.controllerDL)
         self.ul_socket.connect(self.controllerUL)
 
@@ -55,6 +75,43 @@ class Agent(object):
         time.sleep(1) # wait until zmq agree on topics
         self.ul_socket.send("%s %s %s" % (topic, cmd, msg))
 
+        self.connectionRequestSent = True
+
+        #schedule reconnection job that will be canceled if NewNodeAck is received
+        execTime =  str(datetime.datetime.now() + datetime.timedelta(seconds=5))
+        self.log.debug("Schedule reconnection function".format())
+        self.reconnectionJob = self.jobScheduler.add_job(self.connectToController, 'date', run_date=execTime)
+
+    def serve_new_node_ack(self, msg):
+        self.log.debug("Agend received NewNodeAck from Controller".format())
+        self.reconnectionJob.remove()
+
+        #start sending hello msgs
+        execTime =  str(datetime.datetime.now() + datetime.timedelta(seconds=self.echoMsgInterval))
+        self.log.debug("Agent schedule sending of Hello message".format())
+        self.echoSendJob = self.jobScheduler.add_job(self.send_hello_msg, 'date', run_date=execTime)
+
+        execTime = datetime.datetime.now() + datetime.timedelta(seconds=self.echoTimeOut)
+        self.connectionLostJob = self.jobScheduler.add_job(self.connection_to_controller_lost, 'date', run_date=execTime)
+
+    def connection_to_controller_lost(self):
+        self.log.debug("Connectino with controller lost".format())
+
+        if self.connectionRequestSent:
+            try:
+                self.dl_socket.disconnect(self.controllerDL)
+                self.ul_socket.disconnect(self.controllerUL)
+            except:
+                pass
+
+        self.connectionRequestSent = False
+
+        self.echoSendJob.remove()
+
+        #schedule reconnection job that will be canceled if NewNodeAck is received
+        execTime =  str(datetime.datetime.now() + datetime.timedelta(seconds=1))
+        self.log.debug("Schedule reconnection function".format())
+        self.reconnectionJob = self.jobScheduler.add_job(self.connectToController, 'date', run_date=execTime)
 
     def terminate_connection_to_controller(self):
         self.log.debug("Agend sends NodeExitMsg to Controller".format())
@@ -62,6 +119,28 @@ class Agent(object):
         cmd = 'remove_node'
         msg = msgpack.packb({'uuid':self.myUuidStr, 'reason':'Agent_Process_Exit'})
         self.ul_socket.send("%s %s %s" % (topic, cmd, msg))
+
+    def send_hello_msg(self):
+        self.log.debug("Sending Hello message to controller".format())
+        topic = "Controller"
+        cmd = "HelloMsg"
+        msg = msgpack.packb({"source": self.myUuidStr})
+        self.ul_socket.send("%s %s %s" % (topic, cmd, msg))
+
+        #reschedule hello msg
+        self.log.debug("Re-schedule sending of Hello message function".format())
+        execTime =  datetime.datetime.now() + datetime.timedelta(seconds=self.echoMsgInterval)
+        self.echoSendJob = self.jobScheduler.add_job(self.send_hello_msg, 'date', run_date=execTime)
+
+    def serve_hello_msg(self, msg):
+        self.log.debug("Agend received Hello Message from {}".format(msg["source"]))
+
+        #reschedule connection lost function
+        if self.connectionLostJob:
+            self.connectionLostJob.remove()
+            execTime = datetime.datetime.now() + datetime.timedelta(seconds=self.echoTimeOut)
+            self.connectionLostJob = self.jobScheduler.add_job(self.connection_to_controller_lost, 'date', run_date=execTime)
+
 
     def install_egress_scheduler(self, qdisc_config):
         self.log.debug("Configure Qdisc".format())
@@ -189,7 +268,11 @@ class Agent(object):
                 msg = msgpack.unpackb(msg)
                 self.log.debug("Agent received cmd : {} on topic {}".format(cmd, topic))
 
-                if cmd == "install_egress_scheduler":
+                if cmd == "NewNodeAck":
+                    self.serve_new_node_ack(msg)
+                elif cmd == "HelloMsg":
+                    self.serve_hello_msg(msg)
+                elif cmd == "install_egress_scheduler":
                     self.install_egress_scheduler(msg)
                 elif cmd == "set_channel":
                     self.set_channel(msg)

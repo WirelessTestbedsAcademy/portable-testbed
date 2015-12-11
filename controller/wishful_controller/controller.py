@@ -1,9 +1,11 @@
 import logging
 import time
+import datetime
 import sys
 import zmq
 import uuid
 import msgpack
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from pytc.Qdisc import *
 from pytc.Filter import *
@@ -31,8 +33,20 @@ class Controller(object):
         self.qdisc_config = None
         self.bnChannel = 11
 
+        self.jobScheduler = BackgroundScheduler()
+        self.jobScheduler.start()
+        apscheduler_logger = logging.getLogger('apscheduler')
+        apscheduler_logger.setLevel(logging.CRITICAL)
+
         self.echoMsgInterval = 3
         self.echoTimeOut = 10
+        self.echoSendJob = None
+        self.connectionLostJobs = {}
+
+        #start sending hello msgs
+        execTime =  str(datetime.datetime.now() + datetime.timedelta(seconds=self.echoMsgInterval))
+        self.log.debug("Schedule sending of Hello message function".format())
+        self.echoSendJob = self.jobScheduler.add_job(self.send_hello_msg, 'date', run_date=execTime)
 
         self.context = zmq.Context()
         self.poller = zmq.Poller()
@@ -42,6 +56,7 @@ class Controller(object):
         self.ul_socket.setsockopt(zmq.SUBSCRIBE,  "NEW_NODE")
         self.ul_socket.setsockopt(zmq.SUBSCRIBE,  "NODE_EXIT")
         self.ul_socket.setsockopt(zmq.SUBSCRIBE,  "RESPONSE")
+        self.ul_socket.setsockopt(zmq.SUBSCRIBE,  "Controller")
         self.ul_socket.bind(ul)
 
         self.dl_socket = self.context.socket(zmq.PUB) # one PUB socket for downlink communication over topics
@@ -60,12 +75,55 @@ class Controller(object):
         self.ul_socket.setsockopt(zmq.SUBSCRIBE,  newNode.uuid)
         time.sleep(1)
 
+        #schedule connection lost job
+        execTime = datetime.datetime.now() + datetime.timedelta(seconds=self.echoTimeOut)
+        self.connectionLostJobs[msg['uuid']] = self.jobScheduler.add_job(self.connection_to_agent_lost, 'date', run_date=execTime, kwargs={'lostNodeUuid' : msg['uuid']})
+        
+        #send ack
+        self.log.debug("Sending NewNodeAck".format())
+        #send QDisc configuration to agent
+        topic = newNode.uuid
+        cmd = "NewNodeAck"
+        msg = msgpack.packb({"source":"controller"})
+        self.dl_socket.send("%s %s %s" % (topic, cmd, msg))
+
         return newNode
 
+    def connection_to_agent_lost(self, lostNodeUuid):
+        self.log.debug("Lost connection with node with UUID: {}".format(lostNodeUuid))
+        for node in self.nodes:
+            if node.uuid == lostNodeUuid:
+                self.nodes.remove(node)
 
     def remove_node(self, msg):
         self.log.debug("Removing node with UUID: {}, Reason: {}".format(msg['uuid'], msg['reason']))
-        pass
+
+        for node in self.nodes:
+            if node.uuid == msg['uuid']:
+                self.nodes.remove(node)
+
+    def send_hello_msg(self):
+        if self.nodes:
+            self.log.debug("Sending Hello message".format())
+            topic = "ALL"
+            cmd = "HelloMsg"
+            msg = msgpack.packb({"source":"controller"})
+            self.dl_socket.send("%s %s %s" % (topic, cmd, msg))
+
+        #reschedule hello msg
+        self.log.debug("Re-schedule sending of Hello message function".format())
+        execTime =  datetime.datetime.now() + datetime.timedelta(seconds=self.echoMsgInterval)
+        self.echoSendJob = self.jobScheduler.add_job(self.send_hello_msg, 'date', run_date=execTime)
+
+    def serve_hello_msg(self, msg):
+        self.log.debug("Controller received Hello Message from {}".format(msg["source"]))
+
+        #reschedule remove function
+        if msg['source'] in self.connectionLostJobs:
+            self.connectionLostJobs[msg['source']].remove()
+            execTime = datetime.datetime.now() + datetime.timedelta(seconds=self.echoTimeOut)
+            self.connectionLostJobs[msg['source']] = self.jobScheduler.add_job(self.connection_to_agent_lost, 'date', run_date=execTime, kwargs={'lostNodeUuid' : msg['source']})
+
 
     def create_qdisc_config_bn_interface(self):
         #create QDisc configuration TODO: create from config file
@@ -204,6 +262,8 @@ class Controller(object):
                     self.monitor_transmission_parameters(node)
                 elif topic == "NODE_EXIT":
                     self.remove_node(msg)
+                elif cmd == "HelloMsg":
+                    self.serve_hello_msg(msg)
                 elif cmd == "monitor_transmission_parameters_response":
                     self.monitor_transmission_parameters_response(msg)
                 else:

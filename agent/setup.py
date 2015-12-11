@@ -16,5 +16,5 @@ setup(
     long_description='Implementation of a wireless agent',
     keywords='wireless control',
     scripts=['bin/simple_agent'],
-    install_requires=['docopt', 'pyzmq', 'msgpack-python']
+    install_requires=['docopt', 'pyzmq', 'msgpack-python', 'apscheduler']
 )

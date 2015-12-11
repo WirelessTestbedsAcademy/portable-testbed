@@ -16,5 +16,5 @@ setup(
     long_description='Implementation of a wireless controller',
     keywords='wireless control',
     scripts=['bin/simple_controller'],
-    install_requires=['docopt', 'pyzmq', 'msgpack-python']
+    install_requires=['docopt', 'pyzmq', 'msgpack-python', 'apscheduler']
 )
