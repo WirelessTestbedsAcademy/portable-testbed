@@ -8,6 +8,7 @@ import datetime
 import os
 import subprocess
 import re
+import socket
 from apscheduler.schedulers.background import BackgroundScheduler
 
 __author__ = "Piotr Gawlowicz"
@@ -16,21 +17,27 @@ __version__ = "0.1.0"
 __email__ = "gawlowicz@tkn.tu-berlin.de"
 
 class Agent(object):
-    def __init__(self, controllerDL, controllerUL, bnInterface=None):
+    def __init__(self, controllerDL, controllerUL, bnInterface=None, hostname=None, sutMac=None):
         self.log = logging.getLogger("{module}.{name}".format(
             module=self.__class__.__module__, name=self.__class__.__name__))
         self.log.debug("Controller DL: {0}, UL: {1}".format(controllerDL, controllerUL))
         self.myUuid = uuid.uuid4()
         self.myUuidStr = str(self.myUuid)
-        self.myName = "node-123"
+
+        if hostname:
+            self.myName = hostname
+        else:
+            self.myName = socket.gethostname()
+
+        self.connectedSutNodeMac = sutMac
 
         self.bnInterface = bnInterface
         self.qDiscConifg = None
 
-        self.jobScheduler = BackgroundScheduler()
-        self.jobScheduler.start()
         apscheduler_logger = logging.getLogger('apscheduler')
         apscheduler_logger.setLevel(logging.CRITICAL)
+        self.jobScheduler = BackgroundScheduler()
+        self.jobScheduler.start()
 
         self.connectedToController = False
         self.controllerDL = controllerDL
@@ -69,7 +76,7 @@ class Agent(object):
 
         topic = "NEW_NODE"
         cmd = 'add_new_node'
-        msg = msgpack.packb({'uuid':self.myUuidStr, 'name':self.myName})
+        msg = msgpack.packb({'uuid':self.myUuidStr, 'name':self.myName, 'sut_node_mac' : self.connectedSutNodeMac})
 
         self.log.debug("Agent sends context-setup request to controller")
         time.sleep(1) # wait until zmq agree on topics
@@ -95,7 +102,7 @@ class Agent(object):
         self.connectionLostJob = self.jobScheduler.add_job(self.connection_to_controller_lost, 'date', run_date=execTime)
 
     def connection_to_controller_lost(self):
-        self.log.debug("Connectino with controller lost".format())
+        self.log.debug("Lost connection with controller".format())
 
         if self.connectionRequestSent:
             try:

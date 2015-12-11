@@ -16,27 +16,32 @@ __version__ = "0.1.0"
 __email__ = "gawlowicz@tkn.tu-berlin.de"
 
 class Node(object):
-    def __init__(self, uuid, name):
+    def __init__(self, uuid, name, sut_mac):
         self.uuid = uuid
         self.name = name
+        self.connectedSut = sut_mac
 
 class Controller(object):
-    def __init__(self, dl, ul):
+    def __init__(self, dl, ul, nodeList=None, tms=None):
         self.log = logging.getLogger("{module}.{name}".format(
             module=self.__class__.__module__, name=self.__class__.__name__))
 
         self.myUuid = uuid.uuid4()
         self.myUuidStr = str(self.myUuid)
 
+        self.tms = tms
+
+        self.log.info("Waiting for nodes: [" + ", ".join(nodeList) + "]")
+        self.expectedNodeList = nodeList
         self.nodes = []
 
         self.qdisc_config = None
         self.bnChannel = 11
 
-        self.jobScheduler = BackgroundScheduler()
-        self.jobScheduler.start()
         apscheduler_logger = logging.getLogger('apscheduler')
         apscheduler_logger.setLevel(logging.CRITICAL)
+        self.jobScheduler = BackgroundScheduler()
+        self.jobScheduler.start()
 
         self.echoMsgInterval = 3
         self.echoTimeOut = 10
@@ -67,9 +72,15 @@ class Controller(object):
 
 
     def add_new_node(self, msg):
-        self.log.debug("Adding new node with UUID: {} and Name: {}".format(msg['uuid'], msg['name']))
-        newNode = Node(msg['uuid'], msg['name'])
+        self.log.debug("Adding new node with UUID: {},  Name: {}, Connected SUT: {}".format(msg['uuid'], \
+                                                        msg['name'], msg['sut_node_mac']))
+        newNode = Node(msg['uuid'], msg['name'], msg['sut_node_mac'])
         self.nodes.append(newNode)
+
+        self.log.info("Node: {} with SUT: {} connected".format(msg['name'], msg['sut_node_mac']))
+        connectedList = map(lambda n: n.name, self.nodes)
+        waitingList = set(self.expectedNodeList) - set(connectedList)
+        self.log.info("Waiting for nodes: [" + ", ".join(waitingList) + "]")
 
         #subscribe to node UUID
         self.ul_socket.setsockopt(zmq.SUBSCRIBE,  newNode.uuid)
@@ -91,16 +102,33 @@ class Controller(object):
 
     def connection_to_agent_lost(self, lostNodeUuid):
         self.log.debug("Lost connection with node with UUID: {}".format(lostNodeUuid))
+        lostNode = None
         for node in self.nodes:
             if node.uuid == lostNodeUuid:
+                lostNode = node
                 self.nodes.remove(node)
+      
+        if lostNode: 
+            self.log.info("Lost connection to node: {} with SUT: {}".format(lostNode.name, lostNode.connectedSut))
+            connectedList = map(lambda n: n.name, self.nodes)
+            waitingList = set(self.expectedNodeList) - set(connectedList)
+            self.log.info("Waiting for nodes: [" + ", ".join(waitingList) + "]")      
 
     def remove_node(self, msg):
         self.log.debug("Removing node with UUID: {}, Reason: {}".format(msg['uuid'], msg['reason']))
 
+        lostNode = None
         for node in self.nodes:
             if node.uuid == msg['uuid']:
+                lostNode = node
                 self.nodes.remove(node)
+
+        if lostNode: 
+            self.log.info("Node: {} with SUT: {} disconnected".format(lostNode.name, lostNode.connectedSut))
+            connectedList = map(lambda n: n.name, self.nodes)
+            waitingList = set(self.expectedNodeList) - set(connectedList)
+            self.log.info("Waiting for nodes: [" + ", ".join(waitingList) + "]") 
+
 
     def send_hello_msg(self):
         if self.nodes:

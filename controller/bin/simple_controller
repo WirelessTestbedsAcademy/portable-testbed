@@ -30,7 +30,9 @@ def main(args):
     log = logging.getLogger('wishful_agent.main')
     log.debug(args)
 
-    controller = wishful_controller.Controller(dl="tcp://127.0.0.1:8990", ul="tcp://127.0.0.1:8989")
+    bnNodeList = ["node-12", "node-21", "node-44"]
+    controller = wishful_controller.Controller(dl="tcp://127.0.0.1:8990", ul="tcp://127.0.0.1:8989", \
+                                              nodeList=bnNodeList, tms="tcp://127.0.0.1:9990")
 
     controller.run()
 
