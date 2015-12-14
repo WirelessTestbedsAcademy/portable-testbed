@@ -1,0 +1,81 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+simple_tms.py: First implementation of TMS-BNC INterface
+
+Usage:
+   simple_tms.py [options] [-q | -v]
+
+Options:
+   -f                  foo
+
+Other options:
+   -h, --help          show this help message and exit
+   -q, --quiet         print less text
+   -v, --verbose       print more text
+   --version           show version and exit
+"""
+
+import logging
+import tms_bnc_interface
+import time
+import gevent
+import signal
+import sys
+
+__author__ = "Piotr Gawlowicz"
+__copyright__ = "Copyright (c) 2015, Technische Universität Berlin"
+__version__ = "0.1.0"
+__email__ = "gawlowicz@tkn.tu-berlin.de"
+
+
+def main(args):
+    log = logging.getLogger('tms_bnc_interface.main')
+    log.debug(args)
+    interface = tms_bnc_interface.Interface(bnc="tcp://127.0.0.1:9990")
+    interface.start()
+
+    try:
+      while True:
+          log.info("Experiment start")
+          sut_list = interface.get_sut_list()
+          print sut_list
+          gevent.sleep(2)
+          log.info("Send used channel list")
+          interface.send_used_channel_list([1,3,4,8])
+          gevent.sleep(2)
+
+    except KeyboardInterrupt:
+        log.debug("TMS exits")
+    except:
+        log.debug("Unexpected error:".format(sys.exc_info()[0]))
+    finally:
+        log.debug("Exit")
+        interface.kill()
+
+
+if __name__ == "__main__":
+    try:
+        from docopt import docopt
+    except:
+        print("""
+        Please install docopt using:
+            pip install docopt==0.6.1
+        For more refer to:
+        https://github.com/docopt/docopt
+        """)
+        raise
+
+    args = docopt(__doc__, version=__version__)
+
+    log_level = logging.INFO  # default
+    if args['--verbose']:
+        log_level = logging.DEBUG
+    elif args['--quiet']:
+        log_level = logging.ERROR
+
+    logging.basicConfig(level=log_level,
+        format='%(asctime)s - %(name)s.%(funcName)s() - %(levelname)s - %(message)s')
+
+    main(args)

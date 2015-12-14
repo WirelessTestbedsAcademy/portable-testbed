@@ -29,8 +29,6 @@ class Controller(object):
         self.myUuid = uuid.uuid4()
         self.myUuidStr = str(self.myUuid)
 
-        self.tms = tms
-
         self.log.info("Waiting for nodes: [" + ", ".join(nodeList) + "]")
         self.expectedNodeList = nodeList
         self.nodes = []
@@ -67,8 +65,13 @@ class Controller(object):
         self.dl_socket = self.context.socket(zmq.PUB) # one PUB socket for downlink communication over topics
         self.dl_socket.bind(dl)
 
+        self.tms = tms
+        self.tms_socket = self.context.socket(zmq.PAIR)
+        self.tms_socket.bind(tms)
+
         #register UL socket in poller
         self.poller.register(self.ul_socket, zmq.POLLIN)
+        self.poller.register(self.tms_socket, zmq.POLLIN)
 
 
     def add_new_node(self, msg):
@@ -122,6 +125,10 @@ class Controller(object):
             if node.uuid == msg['uuid']:
                 lostNode = node
                 self.nodes.remove(node)
+
+        #remove function job
+        if lostNode.uuid in self.connectionLostJobs:
+            self.connectionLostJobs[lostNode.uuid].remove()
 
         if lostNode: 
             self.log.info("Node: {} with SUT: {} disconnected".format(lostNode.name, lostNode.connectedSut))
@@ -274,6 +281,29 @@ class Controller(object):
     def monitor_transmission_parameters_response(self, msg):
         self.log.debug("Monitor transmission parameters response : {}".format(msg))
 
+    def open_connection_to_tms(self):
+        pass
+
+    def close_connection_with_tms(self):
+        cmd = "EXIT"
+        msg = "EXIT"
+        msg = msgpack.packb(msg)
+        self.tms_socket.send("%s %s" % (cmd, msg))
+
+    def get_sut_nodes_list(self):
+        sut_node_list = []
+        for node in self.nodes:
+            sut_node_list.append(node.connectedSut)
+            
+        cmd = "sut_node_list_response"
+        msg = sut_node_list
+        msg = msgpack.packb(msg)
+        self.tms_socket.send("%s %s" % (cmd, msg))
+
+    def recv_channel_list(self,msg):
+
+        self.log.info("Received used channel list: [" + ", ".join(str(x) for x in msg) + "]")   
+
     def process_msgs(self):
         while True:
             socks = dict(self.poller.poll())
@@ -297,6 +327,17 @@ class Controller(object):
                 else:
                     self.log.debug("Operation not supported")
 
+            if self.tms_socket in socks and socks[self.tms_socket] == zmq.POLLIN:
+                msg = self.tms_socket.recv()
+                cmd, msg = msg.split()
+                msg = msgpack.unpackb(msg)
+                self.log.debug("Controller received cmd : {} from TMS".format(cmd))
+
+                if cmd == "get_sut_nodes_list":
+                    self.get_sut_nodes_list()
+                elif cmd == "used_channel_list":
+                    self.recv_channel_list(msg)
+
 
     def run(self):
         self.log.debug("Controller starts".format())
@@ -312,4 +353,6 @@ class Controller(object):
             self.log.debug("Exit")
             self.ul_socket.close()
             self.dl_socket.close()
+            self.close_connection_with_tms()
+            self.tms_socket.close()
             self.context.term()
