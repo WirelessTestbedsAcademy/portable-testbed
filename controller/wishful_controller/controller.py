@@ -35,6 +35,7 @@ class Controller(object):
 
         self.qdisc_config = None
         self.bnChannel = 11
+        self.availableChannels = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,40,44,48,52,56,60]
 
         apscheduler_logger = logging.getLogger('apscheduler')
         apscheduler_logger.setLevel(logging.CRITICAL)
@@ -294,15 +295,25 @@ class Controller(object):
         sut_node_list = []
         for node in self.nodes:
             sut_node_list.append(node.connectedSut)
-            
+
         cmd = "sut_node_list_response"
         msg = sut_node_list
         msg = msgpack.packb(msg)
         self.tms_socket.send("%s %s" % (cmd, msg))
 
-    def recv_channel_list(self,msg):
+    def recv_channel_list(self,usedChannelList):
+        self.log.info("Received used channel list: [" + ", ".join(str(x) for x in usedChannelList) + "]")
 
-        self.log.info("Received used channel list: [" + ", ".join(str(x) for x in msg) + "]")   
+        #choose one free channel
+        freeChannels = set(self.availableChannels) - set(usedChannelList)
+        self.bnChannel = list(freeChannels)[0]
+
+        cmd = "bn_channel_response"
+        msg = self.bnChannel
+        msg = msgpack.packb(msg)
+        self.tms_socket.send("%s %s" % (cmd, msg))
+
+        
 
     def process_msgs(self):
         while True:
@@ -348,7 +359,7 @@ class Controller(object):
             self.log.debug("Controller exits")
 
         except:
-             self.log.debug("Unexpected error:".format(sys.exc_info()[0]))
+            self.log.debug("Unexpected error:".format(sys.exc_info()[0]))
         finally:
             self.log.debug("Exit")
             self.ul_socket.close()

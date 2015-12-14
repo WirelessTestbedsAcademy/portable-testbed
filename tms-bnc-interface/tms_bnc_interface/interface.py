@@ -23,6 +23,8 @@ class Interface(Greenlet):
         self.myUuid = uuid.uuid4()
         self.myUuidStr = str(self.myUuid)
 
+        self.sutLostCallback = None
+
         self.loopGevent = None
         self.bnc = bnc
         self.connected = False
@@ -35,6 +37,9 @@ class Interface(Greenlet):
         self.connected = True
 
         self.asyncResults = {}
+
+    def register_sut_lost_callback(self, callback):
+        self.sutLostCallback = callback
 
     def stop(self):
         self.log.debug("Exit")
@@ -50,12 +55,13 @@ class Interface(Greenlet):
 
     def get_sut_list(self):
         if self.connected:
+            self.asyncResults["sut_node_list"] = AsyncResult()
+
             cmd = "get_sut_nodes_list"
             msg = ["all_available"]
             msg = msgpack.packb(msg)
-
-            self.asyncResults["sut_node_list"] = AsyncResult()
             self.socket.send("%s %s" % (cmd, msg))
+
             sut_list = self.asyncResults["sut_node_list"].get()
             del self.asyncResults["sut_node_list"]
 
@@ -65,17 +71,37 @@ class Interface(Greenlet):
         if "sut_node_list" in self.asyncResults:
             self.asyncResults["sut_node_list"].set(msg)
 
-    def send_used_channel_list(self, channel_list):
+    def reserve_sut_node(self, sut_list):
+        return sut_list
+
+    def reboot_sut_node(self, sut_mac):
+        pass
+
+    def start_experiment(self):
+        pass
+
+    def stop_experiment(self):
+        pass
+
+    def send_used_channel_list(self, sut_list, channel_list):
         if self.connected:
+            self.asyncResults["bn_channel"] = AsyncResult()
+
             cmd = "used_channel_list"
             msg = channel_list
             msg = msgpack.packb(msg)
             self.socket.send("%s %s" % (cmd, msg))
 
-    def sent_qdisc_config(self):
-        pass
+            bn_channel = self.asyncResults["bn_channel"].get()
+            del self.asyncResults["bn_channel"]
 
-    def reboot_sut_node(self, sut_mac):
+            return bn_channel
+
+    def recv_bn_channel(self, msg):
+        if "bn_channel" in self.asyncResults:
+            self.asyncResults["bn_channel"].set(msg)
+
+    def sent_qdisc_config(self, nodelist, qdisc_config):
         pass
 
     def process_msgs(self):
@@ -91,6 +117,8 @@ class Interface(Greenlet):
                     self.connected = False
                 elif cmd == "sut_node_list_response":
                     self.recv_sut_list(msg)
+                elif cmd == "bn_channel_response":
+                    self.recv_bn_channel(msg)
                 else:
                     self.log.debug("Operation not supported")
 

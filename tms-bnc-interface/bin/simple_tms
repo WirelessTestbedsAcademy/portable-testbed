@@ -29,22 +29,38 @@ __copyright__ = "Copyright (c) 2015, Technische Universität Berlin"
 __version__ = "0.1.0"
 __email__ = "gawlowicz@tkn.tu-berlin.de"
 
+def sut_node_lost(nodeList):
+    print nodeList
+    #kill experiment or continue?
 
 def main(args):
     log = logging.getLogger('tms_bnc_interface.main')
     log.debug(args)
     interface = tms_bnc_interface.Interface(bnc="tcp://127.0.0.1:9990")
+    interface.register_sut_lost_callback(sut_node_lost)
     interface.start()
 
     try:
       while True:
-          log.info("Experiment start")
           sut_list = interface.get_sut_list()
           print sut_list
+
+          reserved_sut_list = interface.reserve_sut_node(sut_list[0])
+
+          bn_channel = interface.send_used_channel_list(reserved_sut_list, [1,2,3,4,8])
+          print bn_channel
+
           gevent.sleep(2)
-          log.info("Send used channel list")
-          interface.send_used_channel_list([1,3,4,8])
+          interface.sent_qdisc_config(reserved_sut_list, "qdisc_config")
+
           gevent.sleep(2)
+          interface.start_experiment()
+          
+          gevent.sleep(5)
+          interface.stop_experiment()
+
+          gevent.sleep(2)
+          interface.reboot_sut_node(reserved_sut_list)
 
     except KeyboardInterrupt:
         log.debug("TMS exits")
