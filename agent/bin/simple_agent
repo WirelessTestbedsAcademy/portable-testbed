@@ -31,8 +31,8 @@ def main(args):
     log = logging.getLogger('wishful_agent.main')
     log.debug(args)
 
-    agent = wishful_agent.Agent(controllerDL="tcp://127.0.0.1:8990", controllerUL="tcp://127.0.0.1:8989", \
-                                bnInterface="wlan0", hostname="node-12", sutMac="08:ed:b9:16:cd:8f")
+    config_file_path = args['--config']
+    agent = wishful_agent.Agent(config=config_file_path)
 
     agent.run()
 

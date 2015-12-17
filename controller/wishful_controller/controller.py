@@ -6,6 +6,7 @@ import zmq
 import uuid
 import msgpack
 from apscheduler.schedulers.background import BackgroundScheduler
+import yaml
 
 from pytc.Qdisc import *
 from pytc.Filter import *
@@ -22,13 +23,23 @@ class Node(object):
         self.connectedSut = sut_mac
 
 class Controller(object):
-    def __init__(self, dl, ul, nodeList=None, tms=None):
+    def __init__(self, dl=None, ul=None, nodeList=None, tms=None, config=None):
         self.log = logging.getLogger("{module}.{name}".format(
             module=self.__class__.__module__, name=self.__class__.__name__))
 
         self.myUuid = uuid.uuid4()
         self.myUuidStr = str(self.myUuid)
 
+        if config:
+            with open(config, 'r') as f:
+                config = yaml.load(f)
+                tms = config['tms']
+                dl = config['dl']
+                ul = config['ul']
+                nodeList = config['bnNodeList']
+
+        self.log.debug("TMS : {}".format(tms))
+        self.log.debug("Controller DL: {0}, UL: {1}".format(dl, ul))
         self.log.info("Waiting for nodes: [" + ", ".join(nodeList) + "]")
         self.expectedNodeList = nodeList
         self.nodes = []

@@ -10,6 +10,7 @@ import subprocess
 import re
 import socket
 from apscheduler.schedulers.background import BackgroundScheduler
+import yaml
 
 __author__ = "Piotr Gawlowicz"
 __copyright__ = "Copyright (c) 2015, Technische Universitat Berlin"
@@ -17,12 +18,24 @@ __version__ = "0.1.0"
 __email__ = "gawlowicz@tkn.tu-berlin.de"
 
 class Agent(object):
-    def __init__(self, controllerDL, controllerUL, bnInterface=None, hostname=None, sutMac=None):
+    def __init__(self, controllerDL=None, controllerUL=None, bnInterface=None, hostname=None, sutMac=None, config=None):
         self.log = logging.getLogger("{module}.{name}".format(
             module=self.__class__.__module__, name=self.__class__.__name__))
-        self.log.debug("Controller DL: {0}, UL: {1}".format(controllerDL, controllerUL))
+
         self.myUuid = uuid.uuid4()
         self.myUuidStr = str(self.myUuid)
+
+        if config:
+            with open(config, 'r') as f:
+                config = yaml.load(f)
+                hostname = config['hostname']
+                bnInterface = config['bnInterface']
+                sutMac = config['sutMac']
+                controllerDL = config['controllerDL']
+                controllerUL = config['controllerUL']
+
+        self.log.debug("Hostname : {}, BN interface : {}, Connected DUT : {}".format(hostname, bnInterface, sutMac))
+        self.log.debug("Controller DL: {0}, UL: {1}".format(controllerDL, controllerUL))
 
         if hostname:
             self.myName = hostname

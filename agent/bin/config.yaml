@@ -1,0 +1,7 @@
+###Agent config file
+
+hostname: 'node-12'
+bnInterface : 'wlan0'
+sutMac: '08:ed:b9:16:cd:8f'
+controllerDL : 'tcp://127.0.0.1:8990'
+controllerUL : 'tcp://127.0.0.1:8989'

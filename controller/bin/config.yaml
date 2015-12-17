@@ -1,0 +1,6 @@
+###Agent config file
+
+tms : 'tcp://127.0.0.1:9990'
+dl : 'tcp://127.0.0.1:8990'
+ul : 'tcp://127.0.0.1:8989'
+bnNodeList : ['node-12', 'node-21', 'node-44']
