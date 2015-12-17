@@ -70,6 +70,7 @@ class Agent(object):
         self.dl_socket.setsockopt(zmq.SUBSCRIBE,  "ALL")
         self.dl_socket.setsockopt(zmq.SUBSCRIBE,  self.myUuidStr)
         self.ul_socket = self.context.socket(zmq.PUB) # for uplink communication with controller
+        self.ul_socket.setsockopt(zmq.LINGER, 100)
 
         #register downlink socket in poller
         self.poller.register(self.dl_socket, zmq.POLLIN)

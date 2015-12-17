@@ -80,6 +80,7 @@ class Controller(object):
 
         self.tms = tms
         self.tms_socket = self.context.socket(zmq.PAIR)
+        self.tms_socket.setsockopt(zmq.LINGER, 100)
         self.tms_socket.bind(tms)
 
         #register UL socket in poller
