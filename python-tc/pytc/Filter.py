@@ -89,7 +89,17 @@ class Filter(object):
 
 
     def setTos(self, tos):
-        self.tos = tos
+        if isinstance(tos, basestring):
+            if tos == 'VI':
+                self.tos = self.VI
+            elif tos == 'VO':
+                self.tos = self.VO
+            elif tos == 'BE':
+                self.tos = self.BE
+            else:
+                self.tos = self.BK
+        else:
+            self.tos = tos
         return
 
 

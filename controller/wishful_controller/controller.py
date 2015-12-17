@@ -8,8 +8,7 @@ import msgpack
 from apscheduler.schedulers.background import BackgroundScheduler
 import yaml
 
-from pytc.Qdisc import *
-from pytc.Filter import *
+import pytc
 
 __author__ = "Piotr Gawlowicz"
 __copyright__ = "Copyright (c) 2015, Technische Universität Berlin"
@@ -29,6 +28,7 @@ class Controller(object):
 
         self.myUuid = uuid.uuid4()
         self.myUuidStr = str(self.myUuid)
+        self.qdisc_config_desc = None
 
         if config:
             with open(config, 'r') as f:
@@ -37,6 +37,7 @@ class Controller(object):
                 dl = config['dl']
                 ul = config['ul']
                 nodeList = config['bnNodeList']
+                self.qdisc_config_desc = config['qdisc']
 
         self.log.debug("TMS : {}".format(tms))
         self.log.debug("Controller DL: {0}, UL: {1}".format(dl, ul))
@@ -173,90 +174,50 @@ class Controller(object):
 
 
     def create_qdisc_config_bn_interface(self):
-        #create QDisc configuration TODO: create from config file
-        qdiscConfig = QdiscConfig()
 
-        prioSched = PrioScheduler(bandNum=6)
-        qdiscConfig.set_root_qdisc(prioSched)
+        root_desc = self.qdisc_config_desc['root']
+        queues_desc = self.qdisc_config_desc['queues']
+        filters_desc = self.qdisc_config_desc['filters']
 
-        pfifo0 = prioSched.addQueue(PfifoQueue(limit=100))
-        pfifo1 = prioSched.addQueue(PfifoQueue(limit=100))
-        pfifo2 = prioSched.addQueue(PfifoQueue(limit=100))
-        pfifo3 = prioSched.addQueue(PfifoQueue(limit=100))
-        pfifo4 = prioSched.addQueue(PfifoQueue(limit=100))
-        pfifo5 = prioSched.addQueue(PfifoQueue(limit=100))
+        qdiscConfig = pytc.QdiscConfig()
 
-        qdiscConfig.add_queue(pfifo0)
-        qdiscConfig.add_queue(pfifo1)
-        qdiscConfig.add_queue(pfifo2)
-        qdiscConfig.add_queue(pfifo3)
-        qdiscConfig.add_queue(pfifo4)
-        qdiscConfig.add_queue(pfifo5)
+        if root_desc['type'] == 'PRIO':
+            rootSched = pytc.PrioScheduler(bandNum=root_desc['params']['bands'])
+        else:
+            rootSched = pytc.PrioScheduler(bandNum=6)
 
-        filter0 = Filter(name="Mesh_Control_Traffic")
-        filter0.setFiveTuple(src=None, dst=None, prot='udp', srcPort='698', dstPort='698')
-        filter0.setTarget(pfifo0)
-        filter0.setTos(Filter.VO)
-        prioSched.addFilter(filter0)
+        qdiscConfig.set_root_qdisc(rootSched)
 
-        filter1 = Filter(name="Testbed_Management_Traffic")
-        filter1.setFiveTuple(src='10.0.0.1', dst=None, prot='tcp', srcPort=None, dstPort='1234')
-        filter1.setTarget(pfifo1)
-        filter1.setTos(Filter.VI)
-        prioSched.addFilter(filter1)
+        queues = {}
 
-        filter2 = Filter(name="BN_Wireless_Control_Traffic")
-        filter2.setFiveTuple(src='192.168.0.1', dst=None, prot='tcp', srcPort=None, dstPort='9980')
-        filter2.setTarget(pfifo2)
-        filter2.setTos(Filter.VI)
-        prioSched.addFilter(filter2)
+        for q_desc in queues_desc:
+            queues[q_desc['id']] = rootSched.addQueue(pytc.PfifoQueue(limit=q_desc['limit']))
+            qdiscConfig.add_queue(queues[q_desc['id']])
 
-        filter3 = Filter(name="SUT_Control_Traffic")
-        filter3.setFiveTuple(src='192.168.1.1', dst=None, prot='tcp', srcPort=None, dstPort=None)
-        filter3.setTarget(pfifo3)
-        filter3.setTos(Filter.BE)
-        prioSched.addFilter(filter3)
 
-        filter4 = Filter(name="SUT_Experiment_Control_Traffic")
-        filter4.setFiveTuple(src='192.168.2.1', dst=None, prot='tcp', srcPort=None, dstPort="1111")
-        filter4.setTarget(pfifo3)
-        filter4.setTos(Filter.BE)
-        prioSched.addFilter(filter4)
+        def convertStr(myObj):
+            if isinstance(myObj, basestring) and myObj == 'None':
+                    return None
+            else:
+                return myObj
 
-        filter5 = Filter(name="SUT_Experiment_Data_Traffic")
-        filter5.setFiveTuple(src='192.168.2.1', dst=None, prot='tcp', srcPort=None, dstPort="1122")
-        filter5.setTarget(pfifo4)
-        filter5.setTos(Filter.BE)
-        prioSched.addFilter(filter5)
+        for f_desc in filters_desc:
+            tmp_filter = pytc.Filter(name=f_desc['name'])
+            fiveTuple = f_desc['fiveTuple']
+            tmp_filter.setFiveTuple(
+                                    src=convertStr(fiveTuple['src']),
+                                    dst=convertStr(fiveTuple['dst']),
+                                    prot=convertStr(fiveTuple['prot']),
+                                    srcPort=convertStr(fiveTuple['srcPort']),
+                                    dstPort=convertStr(fiveTuple['dstPort'])
+                                    )
+            tmp_filter.setTarget(queues[f_desc['targetQueueId']])
+            tmp_filter.setTos(f_desc['TOS'])
+            tmp_filter.setFilterPriority(f_desc['priority'])
+            rootSched.addFilter(tmp_filter)
+            qdiscConfig.add_filter(tmp_filter)
 
-        filter6 = Filter(name="SUT_Experiment_Monitoring_Traffic")
-        filter6.setFiveTuple(src=None, dst='192.168.2.1', prot='tcp', srcPort=None, dstPort='2222')
-        filter6.setTarget(pfifo4)
-        filter6.setTos(Filter.BE)
-        prioSched.addFilter(filter6)
-
-        filter7 = Filter(name="Background_Monitoring_Traffic")
-        filter7.setFiveTuple(src=None, dst=None, prot='tcp', srcPort='3333', dstPort='4444')
-        filter7.setTarget(pfifo5)
-        filter7.setTos(Filter.BK)
-        prioSched.addFilter(filter7)
-
-        filter8 = Filter(name="Default_filter")
-        filter8.setFiveTuple(src=None, dst=None, prot=None, srcPort=None, dstPort=None)
-        filter8.setFilterPriority(2)
-        filter8.setTarget(pfifo5)
-        filter8.setTos(Filter.BK)
-        prioSched.addFilter(filter8)
-
-        qdiscConfig.add_filter(filter0)
-        qdiscConfig.add_filter(filter1)
-        qdiscConfig.add_filter(filter2)
-        qdiscConfig.add_filter(filter3)
-        qdiscConfig.add_filter(filter4)
-        qdiscConfig.add_filter(filter5)
-        qdiscConfig.add_filter(filter6)
-        qdiscConfig.add_filter(filter7)
-        qdiscConfig.add_filter(filter8)
+        print qdiscConfig.serialize()
 
         self.qdisc_config = qdiscConfig
 
@@ -366,15 +327,15 @@ class Controller(object):
         try:
             self.process_msgs()
 
-        except KeyboardInterrupt:
-            self.log.debug("Controller exits")
+        #except KeyboardInterrupt:
+        #    self.log.debug("Controller exits")
 
-        except:
-            self.log.debug("Unexpected error:".format(sys.exc_info()[0]))
+        #except:
+        #    self.log.debug("Unexpected error:".format(sys.exc_info()[0]))
         finally:
             self.log.debug("Exit")
             self.ul_socket.close()
             self.dl_socket.close()
-            self.close_connection_with_tms()
+            #self.close_connection_with_tms()
             self.tms_socket.close()
             self.context.term()

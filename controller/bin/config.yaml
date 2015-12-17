@@ -4,3 +4,81 @@ tms : 'tcp://127.0.0.1:9990'
 dl : 'tcp://127.0.0.1:8990'
 ul : 'tcp://127.0.0.1:8989'
 bnNodeList : ['node-12', 'node-21', 'node-44']
+
+qdisc:
+  root:
+      type : 'PRIO'
+      params: { bands : 6 }
+
+  queues:
+      - {id: 0, type: 'pfifo', limit: 1000}
+      - {id: 1, type: 'pfifo', limit: 1000}
+      - {id: 2, type: 'pfifo', limit: 1000}
+      - {id: 3, type: 'pfifo', limit: 1000}
+      - {id: 4, type: 'pfifo', limit: 1000}
+      - {id: 5, type: 'pfifo', limit: 1000}
+
+  filters:
+      - {
+          name: 'Mesh_Control_Traffic',
+          fiveTuple: {src: None, dst: None, prot: 'udp', srcPort: 698, dstPort: 698},
+          priority: 1,
+          targetQueueId: 0,
+          TOS: 'VO'
+         }
+      - {
+          name: 'Testbed_Management_Traffic',
+          fiveTuple: {src: '10.0.0.1', dst: None, prot: 'tcp', srcPort: None, dstPort: '1234'},
+          priority: 2,
+          targetQueueId: 1,
+          TOS: 'VI'
+        }
+      - {
+          name: 'BN_Wireless_Control_Traffic',
+          fiveTuple: {src: '192.168.0.1', dst: None, prot: 'tcp', srcPort: None, dstPort: '9980'},
+          priority: 3,
+          targetQueueId: 2,
+          TOS: 'VI'
+        }
+      - {
+          name: 'SUT_Control_Traffic',
+          fiveTuple: {src: '192.168.1.1', dst: None, prot: 'tcp', srcPort: None, dstPort: None},
+          priority: 4,
+          targetQueueId: 3,
+          TOS: 'BE'
+        }
+      - {
+          name: 'SUT_Experiment_Control_Traffic',
+          fiveTuple: {src: '192.168.2.1', dst: None, prot: 'tcp', srcPort: None, dstPort: '1111'},
+          priority: 5,
+          targetQueueId: 3,
+          TOS: 'BE'
+        }
+      - {
+          name: 'SUT_Experiment_Data_Traffic',
+          fiveTuple: {src: '192.168.2.1', dst: None, prot: 'tcp', srcPort: None, dstPort: '1122'},
+          priority: 6,
+          targetQueueId: 4,
+          TOS: 'BE'
+        }
+      - {
+          name: 'SUT_Experiment_Monitoring_Traffic',
+          fiveTuple: {src: '192.168.2.1', dst: None, prot: 'tcp', srcPort: None, dstPort: '2222'},
+          priority: 7,
+          targetQueueId: 4,
+          TOS: 'BE'
+        }
+      - {
+          name: 'Background_Monitoring_Traffic',
+          fiveTuple: {src: '192.168.0.1', dst: None, prot: 'tcp', srcPort: None, dstPort: None},
+          priority: 8,
+          targetQueueId: 5,
+          TOS: 'BK'
+        }
+      - {
+          name: 'Default_filter',
+          fiveTuple: {src: None, dst: None, prot: None, srcPort: None, dstPort: None},
+          priority: 10,
+          targetQueueId: 5,
+          TOS: 'BK'
+        }

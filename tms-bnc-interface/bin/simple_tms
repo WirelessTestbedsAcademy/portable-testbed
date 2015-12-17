@@ -33,42 +33,29 @@ def sut_node_lost(nodeList):
     print nodeList
     #kill experiment or continue?
 
+
+log = logging.getLogger('simple_tms')
+interface = tms_bnc_interface.Interface(bnc="tcp://127.0.0.1:9990")
+interface.register_sut_lost_callback(sut_node_lost)
+
+
 def main(args):
-    log = logging.getLogger('tms_bnc_interface.main')
     log.debug(args)
-    interface = tms_bnc_interface.Interface(bnc="tcp://127.0.0.1:9990")
-    interface.register_sut_lost_callback(sut_node_lost)
     interface.start()
 
-    try:
-      while True:
-          sut_list = interface.get_sut_list()
-          print sut_list
+    sut_list = interface.get_sut_list()
+    log.info("Available SUT nodes: [" + ", ".join(sut_list) + "]")
 
-          reserved_sut_list = interface.reserve_sut_node(sut_list[0])
+    reserved_sut_list = interface.reserve_sut_node(sut_list[0])
 
-          bn_channel = interface.send_used_channel_list(reserved_sut_list, [1,2,3,4,8])
-          print bn_channel
+    bn_channel = interface.send_used_channel_list(reserved_sut_list, [1,2,3,4,8])
+    log.info("Channel used in BN network : {}".format(bn_channel))
 
-          gevent.sleep(2)
-          interface.sent_qdisc_config(reserved_sut_list, "qdisc_config")
+    gevent.sleep(2)
+    interface.sent_qdisc_config(reserved_sut_list, "qdisc_config")
 
-          gevent.sleep(2)
-          interface.start_experiment()
-          
-          gevent.sleep(5)
-          interface.stop_experiment()
-
-          gevent.sleep(2)
-          interface.reboot_sut_node(reserved_sut_list)
-
-    except KeyboardInterrupt:
-        log.debug("TMS exits")
-    except:
-        log.debug("Unexpected error:".format(sys.exc_info()[0]))
-    finally:
-        log.debug("Exit")
-        interface.kill()
+    gevent.sleep(2)
+    interface.reboot_sut_node(reserved_sut_list)
 
 
 if __name__ == "__main__":
@@ -94,4 +81,13 @@ if __name__ == "__main__":
     logging.basicConfig(level=log_level,
         format='%(asctime)s - %(name)s.%(funcName)s() - %(levelname)s - %(message)s')
 
-    main(args)
+
+    try:
+        main(args)
+    except KeyboardInterrupt:
+        log.debug("TMS exits")
+    except:
+        log.debug("Unexpected error:".format(sys.exc_info()[0]))
+    finally:
+        log.debug("Exit")
+        interface.kill()

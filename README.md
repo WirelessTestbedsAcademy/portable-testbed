@@ -17,7 +17,7 @@ python ./agent/bin/simple_agent -v --config=./agent/bin/config.yaml
 
 ### 2.2 Controller:
 ```
-python ./controller/bin/simple_controller -v
+python ./controller/bin/simple_controller -v --config=./controller/bin/config.yaml
 ```
 
 ### 2.3 Simple TMS:

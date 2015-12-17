@@ -238,6 +238,7 @@ class Agent(object):
                 cmd = cmd + "match ip dport {} 0xffff ".format(dstPort)
 
             cmd = cmd + "flowid {}".format(config["target"])
+
             os.system(cmd)
 
         self.log.debug("Qdisc setup completed".format())
