@@ -57,6 +57,7 @@ class Agent(object):
         self.controllerUL = controllerUL
         self.reconnectionJob = None
         self.connectionRequestSent = False
+        self.connectedToController = False
 
         self.echoMsgInterval = 3
         self.echoTimeOut = 10
@@ -91,6 +92,7 @@ class Agent(object):
         cmd = 'add_new_node'
         msg = msgpack.packb({'uuid':self.myUuidStr, 'name':self.myName, 'sut_node_mac' : self.connectedSutNodeMac})
 
+        self.log.info("Connecting with Controller : {}, {}".format(self.controllerDL, self.controllerUL))
         self.log.debug("Agent sends context-setup request to controller")
         time.sleep(1) # wait until zmq agree on topics
         self.ul_socket.send("%s %s %s" % (topic, cmd, msg))
@@ -103,6 +105,8 @@ class Agent(object):
         self.reconnectionJob = self.jobScheduler.add_job(self.connectToController, 'date', run_date=execTime)
 
     def serve_new_node_ack(self, msg):
+        self.log.info("Connected with Controller".format())
+        self.connectedToController = True
         self.log.debug("Agend received NewNodeAck from Controller".format())
         self.reconnectionJob.remove()
 
@@ -115,7 +119,8 @@ class Agent(object):
         self.connectionLostJob = self.jobScheduler.add_job(self.connection_to_controller_lost, 'date', run_date=execTime)
 
     def connection_to_controller_lost(self):
-        self.log.debug("Lost connection with controller".format())
+        self.log.info("Lost connection with Controller".format())
+        self.connectedToController = False
 
         if self.connectionRequestSent:
             try:
@@ -134,11 +139,13 @@ class Agent(object):
         self.reconnectionJob = self.jobScheduler.add_job(self.connectToController, 'date', run_date=execTime)
 
     def terminate_connection_to_controller(self):
-        self.log.debug("Agend sends NodeExitMsg to Controller".format())
-        topic = "NODE_EXIT"
-        cmd = 'remove_node'
-        msg = msgpack.packb({'uuid':self.myUuidStr, 'reason':'Agent_Process_Exit'})
-        self.ul_socket.send("%s %s %s" % (topic, cmd, msg))
+        if self.connectedToController:
+            self.log.debug("Agend sends NodeExitMsg to Controller".format())
+            topic = "NODE_EXIT"
+            cmd = 'remove_node'
+            msg = msgpack.packb({'uuid':self.myUuidStr, 'reason':'Agent_Process_Exit'})
+            self.ul_socket.send("%s %s %s" % (topic, cmd, msg))
+            self.connectedToController = False
 
     def send_hello_msg(self):
         self.log.debug("Sending Hello message to controller".format())
