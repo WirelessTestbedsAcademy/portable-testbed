@@ -116,6 +116,8 @@ class Agent(object):
         self.log.debug("Agent schedule sending of Hello message".format())
         self.echoSendJob = self.jobScheduler.add_job(self.send_hello_msg, 'date', run_date=execTime)
 
+        if self.connectionLostJob:
+            self.connectionLostJob.remove()
         execTime = datetime.datetime.now() + datetime.timedelta(seconds=self.echoTimeOut)
         self.connectionLostJob = self.jobScheduler.add_job(self.connection_to_controller_lost, 'date', run_date=execTime)
 
