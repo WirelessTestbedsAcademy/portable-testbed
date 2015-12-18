@@ -1,5 +1,12 @@
 # Portable-Testbed software
 
+This repository contains software that is used in Portable Testbed to control Backbone Network:
+	* Backbone Network Controller (BNC)
+	* Backbone Network Agent
+	* TMS-BNC Interface
+	* Libs:
+		* python-tc for Linux Traffic-Control subsystem configuration
+
 ## 1. Installation:
 ### 1.1 BN node:
 ```
