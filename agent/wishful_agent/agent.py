@@ -24,7 +24,8 @@ class Agent(object):
 
         self.myUuid = uuid.uuid4()
         self.myUuidStr = str(self.myUuid)
-        self.defaultBnChannel = 11
+        self.bnChannel = 11
+        self.bnIpAddress = None
 
         if config:
             with open(config, 'r') as f:
@@ -34,7 +35,8 @@ class Agent(object):
                 sutMac = config['sutMac']
                 controllerDL = config['controllerDL']
                 controllerUL = config['controllerUL']
-                self.defaultBnChannel = config['bnChannel']
+                self.bnChannel = config['bnChannel']
+                self.bnIpAddress = config['ipAddress']
 
         self.log.debug("Hostname : {}, BN interface : {}, Connected DUT : {}".format(hostname, bnInterface, sutMac))
         self.log.debug("Controller DL: {0}, UL: {1}".format(controllerDL, controllerUL))
@@ -80,9 +82,13 @@ class Agent(object):
         self.poller.register(self.dl_socket, zmq.POLLIN)
 
     def configure_bn_interface(self):
-        defaultChannel = self.defaultBnChannel
+        defaultChannel = self.bnChannel
         interface = self.bnInterface
+        bnIpAddress = self.bnIpAddress 
         self.log.info("Configure BN interface: {} with channel: {}, ESSID: PortableTestbed-{}".format(interface, defaultChannel, defaultChannel))
+
+        cmd = "ifconfig {} down".format(interface)
+        os.system(cmd)    
 
         cmd = "iwconfig {} mode ad-hoc".format(interface)
         os.system(cmd)
@@ -95,6 +101,9 @@ class Agent(object):
 
         #give some time to connect
         time.sleep(3)
+
+        cmd = "ifconfig {} {} netmask 255.255.255.0 up".format(interface, bnIpAddress)
+        os.system(cmd)        
 
     def connectToController(self):
         self.log.debug("Agent connects controller: DL:{0}, UL:{1}".format(self.controllerDL, self.controllerUL))
