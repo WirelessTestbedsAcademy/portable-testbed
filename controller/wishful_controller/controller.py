@@ -388,11 +388,11 @@ class Controller(object):
         try:
             self.process_msgs()
 
-        #except KeyboardInterrupt:
-        #    self.log.debug("Controller exits")
+        except KeyboardInterrupt:
+            self.log.debug("Controller exits")
 
-        #except:
-        #    self.log.debug("Unexpected error:".format(sys.exc_info()[0]))
+        except:
+            self.log.debug("Unexpected error:".format(sys.exc_info()[0]))
         finally:
             self.log.debug("Exit")
             self.ul_socket.close()
