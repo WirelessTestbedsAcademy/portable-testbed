@@ -1,7 +1,7 @@
 WiSHFUL Framework
 =================
 
-This is a prototypic implementation of a Portable Testbed controller using the Unified Programming Interfaces (UPIs) defined in WiSHFUL project. 
+This is a prototypic implementation of a Backbone Network Controller (BNC) that uses the Unified Programming Interfaces (UPIs) defined in WiSHFUL project. 
 
 ## Acknowledgement
 

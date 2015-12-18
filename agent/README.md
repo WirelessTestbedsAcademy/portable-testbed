@@ -1,7 +1,7 @@
 WiSHFUL Node Agent Framework
 ============================
 
-This is a prototypic implementation of a Backbone network agent that uses the Unified Programming Interfaces (UPIs) defined in WiSHFUL project. 
+This is a prototypic implementation of a Backbone Network agent that uses the Unified Programming Interfaces (UPIs) defined in WiSHFUL project. 
 
 
 ## Acknowledgement
