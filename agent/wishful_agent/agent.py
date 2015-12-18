@@ -24,6 +24,7 @@ class Agent(object):
 
         self.myUuid = uuid.uuid4()
         self.myUuidStr = str(self.myUuid)
+        self.defaultBnChannel = 11
 
         if config:
             with open(config, 'r') as f:
@@ -33,6 +34,7 @@ class Agent(object):
                 sutMac = config['sutMac']
                 controllerDL = config['controllerDL']
                 controllerUL = config['controllerUL']
+                self.defaultBnChannel = config['bnChannel']
 
         self.log.debug("Hostname : {}, BN interface : {}, Connected DUT : {}".format(hostname, bnInterface, sutMac))
         self.log.debug("Controller DL: {0}, UL: {1}".format(controllerDL, controllerUL))
@@ -64,6 +66,8 @@ class Agent(object):
         self.echoSendJob = None
         self.connectionLostJob = None 
 
+        self.configure_bn_interface()
+
         self.poller = zmq.Poller()
         self.context = zmq.Context()
         self.dl_socket = self.context.socket(zmq.SUB) # for downlink communication with controller
@@ -75,6 +79,22 @@ class Agent(object):
         #register downlink socket in poller
         self.poller.register(self.dl_socket, zmq.POLLIN)
 
+    def configure_bn_interface(self):
+        defaultChannel = self.defaultBnChannel
+        interface = self.bnInterface
+        self.log.info("Configure BN interface: {} with channel: {}, ESSID: PortableTestbed-{}".format(interface, defaultChannel, defaultChannel))
+
+        cmd = "iwconfig {} mode ad-hoc".format(interface)
+        os.system(cmd)
+        
+        cmd = "iwconfig {} essid PortableTestbed-{}".format(interface, defaultChannel)
+        os.system(cmd)
+
+        cmd = "iwconfig {} channel {}".format(interface, defaultChannel)
+        os.system(cmd)
+
+        #give some time to connect
+        time.sleep(3)
 
     def connectToController(self):
         self.log.debug("Agent connects controller: DL:{0}, UL:{1}".format(self.controllerDL, self.controllerUL))
@@ -259,9 +279,15 @@ class Agent(object):
 
         interface = self.bnInterface
 
-        #TODO: set channel for BN interface
         self.log.debug("Configure new channel {} for interface: {}".format(channel, interface))
 
+        #change essid to prevent reconnection on old channel
+        cmd = "iwconfig {} essid PortableTestbed-{}".format(interface, channel)
+        os.system(cmd)
+
+        cmd = "iwconfig {} channel {}".format(interface, channel)
+        os.system(cmd)
+        
     def monitor_transmission_parameters(self, msg):
         self.log.debug("Monitoring interface {}, parameters: {}".format(self.bnInterface, msg))
         parameters = msg["parameters"]
