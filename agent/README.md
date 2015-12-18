@@ -1,9 +1,8 @@
 WiSHFUL Node Agent Framework
 ============================
 
-This is a prototypic implementation of a wireless agent providing the Unified
-Programming Interfaces (UPIs) of the Wishful software platform for
-radio and network control.
+This is a prototypic implementation of a Backbone network agent that uses the Unified Programming Interfaces (UPIs) defined in WiSHFUL project. 
+
 
 ## Acknowledgement
 

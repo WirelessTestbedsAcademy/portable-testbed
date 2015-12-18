@@ -1,8 +1,7 @@
 WiSHFUL Framework
 =================
 
-This is a prototypic implementation of a wireless controller using the Unified Programming Interfaces (UPIs) of the 
-Wishful software platform for radio and network control.
+This is a prototypic implementation of a Portable Testbed controller using the Unified Programming Interfaces (UPIs) defined in WiSHFUL project. 
 
 ## Acknowledgement
 
