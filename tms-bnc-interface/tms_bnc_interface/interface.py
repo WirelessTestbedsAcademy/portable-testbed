@@ -75,7 +75,19 @@ class Interface(Greenlet):
         return sut_list
 
     def reboot_sut_node(self, sut_mac):
-        pass
+        if self.connected:
+            sut_list = []
+
+            if hasattr(sut_mac, '__iter__'):
+                sut_list.extend(sut_mac)
+            else:
+                sut_list.append(sut_mac)
+
+            cmd = "reboot_sut"
+            msg = sut_list
+            msg = msgpack.packb(msg)
+            self.socket.send("%s %s" % (cmd, msg))
+
 
     def start_experiment(self):
         pass
@@ -102,7 +114,11 @@ class Interface(Greenlet):
             self.asyncResults["bn_channel"].set(msg)
 
     def sent_qdisc_config(self, nodelist, qdisc_config):
-        pass
+        if self.connected:
+            cmd = "qdisc_config"
+            msg = qdisc_config
+            msg = msgpack.packb(msg)
+            self.socket.send("%s %s" % (cmd, msg))
 
     def process_msgs(self):
             socks = dict(self.poller.poll())

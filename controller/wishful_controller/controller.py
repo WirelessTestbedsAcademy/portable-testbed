@@ -46,6 +46,8 @@ class Controller(object):
         self.nodes = []
 
         self.qdisc_config = None
+        self.create_qdisc_config_bn_interface()
+
         self.bnChannel = 11
         self.availableChannels = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,40,44,48,52,56,60]
 
@@ -174,6 +176,12 @@ class Controller(object):
             self.connectionLostJobs[msg['source']] = self.jobScheduler.add_job(self.connection_to_agent_lost, 'date', run_date=execTime, kwargs={'lostNodeUuid' : msg['source']})
 
 
+    def convertStr(self, myObj):
+        if isinstance(myObj, basestring) and myObj == 'None':
+                return None
+        else:
+            return myObj
+
     def create_qdisc_config_bn_interface(self):
 
         root_desc = self.qdisc_config_desc['root']
@@ -195,22 +203,15 @@ class Controller(object):
             queues[q_desc['id']] = rootSched.addQueue(pytc.PfifoQueue(limit=q_desc['limit']))
             qdiscConfig.add_queue(queues[q_desc['id']])
 
-
-        def convertStr(myObj):
-            if isinstance(myObj, basestring) and myObj == 'None':
-                    return None
-            else:
-                return myObj
-
         for f_desc in filters_desc:
             tmp_filter = pytc.Filter(name=f_desc['name'])
             fiveTuple = f_desc['fiveTuple']
             tmp_filter.setFiveTuple(
-                                    src=convertStr(fiveTuple['src']),
-                                    dst=convertStr(fiveTuple['dst']),
-                                    prot=convertStr(fiveTuple['prot']),
-                                    srcPort=convertStr(fiveTuple['srcPort']),
-                                    dstPort=convertStr(fiveTuple['dstPort'])
+                                    src=self.convertStr(fiveTuple['src']),
+                                    dst=self.convertStr(fiveTuple['dst']),
+                                    prot=self.convertStr(fiveTuple['prot']),
+                                    srcPort=self.convertStr(fiveTuple['srcPort']),
+                                    dstPort=self.convertStr(fiveTuple['dstPort'])
                                     )
             tmp_filter.setTarget(queues[f_desc['targetQueueId']])
             tmp_filter.setTos(f_desc['TOS'])
@@ -221,22 +222,18 @@ class Controller(object):
         self.qdisc_config = qdiscConfig
 
 
-    def install_egress_scheduler(self, node):
-        self.log.debug("Sending QDisc config to node with UUID: {}".format(node.uuid))
-
-        if not self.qdisc_config:
-            self.create_qdisc_config_bn_interface()
+    def install_egress_scheduler(self, group, qdisc_config):
+        self.log.debug("Sending QDisc config to group: {}".format(group))
 
         #send QDisc configuration to agent
-        topic = node.uuid
+        topic = group
         cmd = "install_egress_scheduler"
-        msg = msgpack.packb(self.qdisc_config.serialize())
+        msg = msgpack.packb(qdisc_config.serialize())
         self.dl_socket.send("%s %s %s" % (topic, cmd, msg))
 
-    def set_channel(self, node, channel):
-        self.log.debug("Set channel {} to node with UUID: {}".format(channel, node.uuid))
+    def set_channel(self, topic, channel):
+        self.log.debug("Set channel {} to group: {}".format(channel, topic))
 
-        topic = node.uuid
         cmd = "set_channel"
         msg = msgpack.packb(channel)
         self.dl_socket.send("%s %s %s" % (topic, cmd, msg))
@@ -273,18 +270,80 @@ class Controller(object):
         self.tms_socket.send("%s %s" % (cmd, msg))
 
     def recv_channel_list(self,usedChannelList):
-        self.log.info("Received used channel list: [" + ", ".join(str(x) for x in usedChannelList) + "]")
+        self.log.info("From TMS received used channel list: [" + ", ".join(str(x) for x in usedChannelList) + "]")
 
         #choose one free channel
         freeChannels = set(self.availableChannels) - set(usedChannelList)
         self.bnChannel = list(freeChannels)[0]
+        self.log.info("Channel for BN network : {}".format(self.bnChannel))
+
+        self.set_channel("ALL", self.bnChannel)
 
         cmd = "bn_channel_response"
         msg = self.bnChannel
         msg = msgpack.packb(msg)
         self.tms_socket.send("%s %s" % (cmd, msg))
 
-        
+    def recv_qdisc_config(self, filter_config):
+        self.log.info("From TMS received QDisc config".format())
+
+        qdiscConfig = self.qdisc_config
+        rootSched = qdiscConfig.root
+        queues = qdiscConfig.queues
+        filters = qdiscConfig.filters
+        priority = len(filters) -1 # last one is default
+
+        for f_desc in filter_config:
+            tmp_filter = pytc.Filter(name=f_desc['name'])
+            fiveTuple = f_desc['fiveTuple']
+            tmp_filter.setFiveTuple(
+                                    src=self.convertStr(fiveTuple['src']),
+                                    dst=self.convertStr(fiveTuple['dst']),
+                                    prot=self.convertStr(fiveTuple['prot']),
+                                    srcPort=self.convertStr(fiveTuple['srcPort']),
+                                    dstPort=self.convertStr(fiveTuple['dstPort'])
+                                    )
+
+            priority += 1
+            tmp_filter.setFilterPriority( priority )
+
+            net_priority = f_desc['NET_priority']
+            mac_priority = f_desc['MAC_priority']
+
+            if net_priority:
+                tmp_filter.setTarget( queues[ 2 + net_priority ])
+            else:
+                tmp_filter.setTarget( queues[ len(queues) - 1 ])
+
+            if mac_priority == 1:
+                tmp_filter.setTos('BE')
+            else:
+                tmp_filter.setTos('BK')
+
+            rootSched.addFilter(tmp_filter)
+            qdiscConfig.add_filter(tmp_filter)
+
+        self.install_egress_scheduler("ALL", qdiscConfig)
+
+        #clear to default qdisc config
+        self.qdisc_config = None
+        self.create_qdisc_config_bn_interface()
+
+    def recv_reboot_sut(self, sut_list):
+        self.log.info("From TMS received DUT node to reboot: [" + ", ".join(str(x) for x in sut_list) + "]")
+
+        bn_nodes = []
+        for sut in sut_list:
+            for node in self.nodes:
+                if node.connectedSut == sut:
+                    bn_nodes.append(node.uuid)
+
+        self.log.info("Sending SUT-reboot command to BN nodes: [" + ", ".join(str(x) for x in bn_nodes) + "]")
+
+        cmd = "reboot_sut"
+        msg = msgpack.packb("reboot_sut")
+        for uuid in bn_nodes:
+            self.dl_socket.send("%s %s %s" % (uuid, cmd, msg))
 
     def process_msgs(self):
         while True:
@@ -297,9 +356,7 @@ class Controller(object):
                 self.log.debug("Controller received cmd : {} on topic {}".format(cmd, topic))
                 if topic == "NEW_NODE":
                     node = self.add_new_node(msg)
-                    self.install_egress_scheduler(node)
-                    self.set_channel(node, self.bnChannel)
-                    self.monitor_transmission_parameters(node)
+                    self.install_egress_scheduler(node.uuid, self.qdisc_config)
                 elif topic == "NODE_EXIT":
                     self.remove_node(msg)
                 elif cmd == "HelloMsg":
@@ -319,18 +376,23 @@ class Controller(object):
                     self.get_sut_nodes_list()
                 elif cmd == "used_channel_list":
                     self.recv_channel_list(msg)
-
+                elif cmd == "qdisc_config":
+                    self.recv_qdisc_config(msg)
+                elif cmd == "reboot_sut":
+                    self.recv_reboot_sut(msg)
+                else:
+                    self.log.debug("Command : {} is not supported".format(cmd))
 
     def run(self):
         self.log.debug("Controller starts".format())
         try:
             self.process_msgs()
 
-        except KeyboardInterrupt:
-            self.log.debug("Controller exits")
+        #except KeyboardInterrupt:
+        #    self.log.debug("Controller exits")
 
-        except:
-            self.log.debug("Unexpected error:".format(sys.exc_info()[0]))
+        #except:
+        #    self.log.debug("Unexpected error:".format(sys.exc_info()[0]))
         finally:
             self.log.debug("Exit")
             self.ul_socket.close()

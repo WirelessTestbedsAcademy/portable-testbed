@@ -173,7 +173,7 @@ class Agent(object):
 
 
     def install_egress_scheduler(self, qdisc_config):
-        self.log.debug("Configure Qdisc".format())
+        self.log.info("Configure Qdisc".format())
 
         self.qDiscConifg = qdisc_config
         interface = self.bnInterface
@@ -255,7 +255,7 @@ class Agent(object):
 
     def set_channel(self, msg):
         channel = msg
-        self.log.debug("Set channel {}".format(channel))
+        self.log.info("Set channel {}".format(channel))
 
         interface = self.bnInterface
 
@@ -288,6 +288,11 @@ class Agent(object):
         msg = msgpack.packb(result)
         self.ul_socket.send("%s %s %s" % (topic, cmd, msg))
 
+    def reboot_sut(self, msg):
+        self.log.info("Rebooting SUT : {}".format(self.connectedSutNodeMac))
+        #TODO: do reboot, toggle GPIO
+
+
     def process_msgs(self):
         # Work on requests from controller
         while True:
@@ -309,6 +314,8 @@ class Agent(object):
                     self.set_channel(msg)
                 elif cmd == "monitor_transmission_parameters":
                     self.monitor_transmission_parameters(msg)
+                elif cmd == "reboot_sut":
+                    self.reboot_sut(msg)
                 else:
                     self.log.debug("Operation not supported")
 

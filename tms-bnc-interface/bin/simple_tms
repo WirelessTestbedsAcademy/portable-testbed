@@ -44,17 +44,55 @@ def main(args):
     interface.start()
 
     sut_list = interface.get_sut_list()
-    log.info("Available SUT nodes: [" + ", ".join(sut_list) + "]")
+    log.info("Available DUT nodes: [" + ", ".join(sut_list) + "]")
 
     reserved_sut_list = interface.reserve_sut_node(sut_list[0])
 
-    bn_channel = interface.send_used_channel_list(reserved_sut_list, [1,2,3,4,8])
-    log.info("Channel used in BN network : {}".format(bn_channel))
+    used_channel_list =  [1,2,3,4,5,8]
+    log.info("Sending used channel list: [" + ", ".join(str(x) for x in used_channel_list) + "]")
+    bn_channel = interface.send_used_channel_list(reserved_sut_list, used_channel_list )
+    log.info("Received channel used in BN network : {}".format(bn_channel))
 
     gevent.sleep(2)
-    interface.sent_qdisc_config(reserved_sut_list, "qdisc_config")
+    qdisc_config = [
+         {
+          'name': 'SUT_Control_Traffic',
+          'fiveTuple': {'src': '192.168.1.1', 'dst': None, 'prot': 'tcp', 'srcPort': None, 'dstPort': None},
+          'NET_priority': 1,
+          'MAC_priority': 1
+        },
+        {
+          'name': 'SUT_Experiment_Control_Traffic',
+          'fiveTuple': {'src': '192.168.2.1', 'dst': None, 'prot': 'tcp', 'srcPort': None, 'dstPort': '1111'},
+          'NET_priority': 1,
+          'MAC_priority': 1
+        },
+        {
+          'name': 'SUT_Experiment_Data_Traffic',
+          'fiveTuple': {'src': '192.168.2.1', 'dst': None, 'prot': 'tcp', 'srcPort': None, 'dstPort': '1122'},
+          'NET_priority': 2,
+          'MAC_priority': 1
+        },
+        {
+          'name': 'SUT_Experiment_Monitoring_Traffic',
+          'fiveTuple': {'src': '192.168.2.1', 'dst': None, 'prot': 'tcp', 'srcPort': None, 'dstPort': '2222'},
+          'NET_priority': 2,
+          'MAC_priority': 2
+        },
+        {
+          'name': 'Background_Monitoring_Traffic',
+          'fiveTuple': {'src': '192.168.0.1', 'dst': None, 'prot': 'tcp', 'srcPort': None, 'dstPort': None},
+          'NET_priority': 3,
+          'MAC_priority': 2
+        }
+    ]
 
-    gevent.sleep(2)
+    log.info("Sending QDisc configuration".format())
+    interface.sent_qdisc_config(reserved_sut_list, qdisc_config)
+
+    gevent.sleep(3)
+
+    log.info("Reboot reserved nodes".format())
     interface.reboot_sut_node(reserved_sut_list)
 
 

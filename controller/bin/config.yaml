@@ -1,4 +1,4 @@
-###Agent config file
+###Controller config file
 
 tms : 'tcp://127.0.0.1:9990'
 dl : 'tcp://127.0.0.1:8990'
@@ -8,7 +8,7 @@ bnNodeList : ['node-12', 'node-21', 'node-44']
 qdisc:
   root:
       type : 'PRIO'
-      params: { bands : 6 }
+      params: { bands : 8 }
 
   queues:
       - {id: 0, type: 'pfifo', limit: 1000}
@@ -17,6 +17,8 @@ qdisc:
       - {id: 3, type: 'pfifo', limit: 1000}
       - {id: 4, type: 'pfifo', limit: 1000}
       - {id: 5, type: 'pfifo', limit: 1000}
+      - {id: 6, type: 'pfifo', limit: 1000}
+      - {id: 7, type: 'pfifo', limit: 1000}
 
   filters:
       - {
@@ -41,44 +43,9 @@ qdisc:
           TOS: 'VI'
         }
       - {
-          name: 'SUT_Control_Traffic',
-          fiveTuple: {src: '192.168.1.1', dst: None, prot: 'tcp', srcPort: None, dstPort: None},
-          priority: 4,
-          targetQueueId: 3,
-          TOS: 'BE'
-        }
-      - {
-          name: 'SUT_Experiment_Control_Traffic',
-          fiveTuple: {src: '192.168.2.1', dst: None, prot: 'tcp', srcPort: None, dstPort: '1111'},
-          priority: 5,
-          targetQueueId: 3,
-          TOS: 'BE'
-        }
-      - {
-          name: 'SUT_Experiment_Data_Traffic',
-          fiveTuple: {src: '192.168.2.1', dst: None, prot: 'tcp', srcPort: None, dstPort: '1122'},
-          priority: 6,
-          targetQueueId: 4,
-          TOS: 'BE'
-        }
-      - {
-          name: 'SUT_Experiment_Monitoring_Traffic',
-          fiveTuple: {src: '192.168.2.1', dst: None, prot: 'tcp', srcPort: None, dstPort: '2222'},
-          priority: 7,
-          targetQueueId: 4,
-          TOS: 'BE'
-        }
-      - {
-          name: 'Background_Monitoring_Traffic',
-          fiveTuple: {src: '192.168.0.1', dst: None, prot: 'tcp', srcPort: None, dstPort: None},
-          priority: 8,
-          targetQueueId: 5,
-          TOS: 'BK'
-        }
-      - {
           name: 'Default_filter',
           fiveTuple: {src: None, dst: None, prot: None, srcPort: None, dstPort: None},
-          priority: 10,
-          targetQueueId: 5,
+          priority: 100,
+          targetQueueId: 7,
           TOS: 'BK'
         }

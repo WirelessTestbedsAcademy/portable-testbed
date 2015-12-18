@@ -12,6 +12,9 @@ class MajorHandleGenerator(object):
     def __init__(self):
         self.value = 1
 
+    def reset(self):
+        self.value = 1
+
     def GenerateValue(self):
         curVal = self.value
         self.value += 1
@@ -95,9 +98,12 @@ class TcClass(object):
 
 
 class Qdisc(object):
-    def __init__(self):
+    def __init__(self, reset=False):
         self.mMinorHandleGen = MinorHandleGenerator()
         majorHandleGen = MajorHandleGenerator()
+
+        if reset:
+            majorHandleGen.reset()
         self.mHandle = Handle(majorHandleGen.GenerateValue(),0)
         self.mParent = None
 
@@ -128,14 +134,14 @@ class Qdisc(object):
         return desc
 
 class ClasslessQdisc(Qdisc):
-    def __init__(self):
-        super(ClasslessQdisc,self).__init__()
+    def __init__(self, reset=False):
+        super(ClasslessQdisc,self).__init__(reset)
         pass
 
 
 class ClassfulQdisc(Qdisc):
-    def __init__(self):
-        super(ClassfulQdisc,self).__init__()
+    def __init__(self, reset):
+        super(ClassfulQdisc,self).__init__(reset)
         self.classes = []
         self.queues = []
         self.filters = []
@@ -249,7 +255,7 @@ class SfqQueue(ClasslessQdisc):
 
 class PrioScheduler(ClassfulQdisc):
     def __init__(self, bandNum):
-        super(PrioScheduler,self).__init__()
+        super(PrioScheduler,self).__init__(reset=True)
         self.bandNum = bandNum
         for i in range(0, self.bandNum):
             self.addClass(installed=True)
