@@ -11,6 +11,7 @@ import re
 import socket
 from apscheduler.schedulers.background import BackgroundScheduler
 import yaml
+import bnconfig
 
 __author__ = "Piotr Gawlowicz"
 __copyright__ = "Copyright (c) 2015, Technische Universitat Berlin"
@@ -37,6 +38,7 @@ class Agent(object):
                 controllerUL = config['controllerUL']
                 self.bnChannel = config['bnChannel']
                 self.bnIpAddress = config['ipAddress']
+                self.dutInterface = "eth0"
 
         self.log.debug("Hostname : {}, BN interface : {}, Connected DUT : {}".format(hostname, bnInterface, sutMac))
         self.log.debug("Controller DL: {0}, UL: {1}".format(controllerDL, controllerUL))
@@ -68,7 +70,8 @@ class Agent(object):
         self.echoSendJob = None
         self.connectionLostJob = None 
 
-        self.configure_bn_interface()
+        self.start_bn_node()
+        time.sleep(2)
 
         self.poller = zmq.Poller()
         self.context = zmq.Context()
@@ -81,29 +84,21 @@ class Agent(object):
         #register downlink socket in poller
         self.poller.register(self.dl_socket, zmq.POLLIN)
 
-    def configure_bn_interface(self):
-        defaultChannel = self.bnChannel
-        interface = self.bnInterface
-        bnIpAddress = self.bnIpAddress 
-        self.log.info("Configure BN interface: {} with channel: {}, ESSID: PortableTestbed-{}".format(interface, defaultChannel, defaultChannel))
+    def start_bn_node(self):
+        bnconfig.stop_network_manager()
+        time.sleep(1)
+        bnconfig.load_bridge_nf()
+        bnconfig.start_ibss(self.bnInterface, self.bnChannel)
+        bnconfig.ifconfig(self.bnInterface, self.bnIpAddress, mask="255.255.255.0")
+        bnconfig.create_vxlan(self.bnInterface, self.dutInterface)
+        bnconfig.start_olsrd(self.bnInterface)
 
-        cmd = "ifconfig {} down".format(interface)
-        os.system(cmd)    
-
-        cmd = "iwconfig {} mode ad-hoc".format(interface)
-        os.system(cmd)
-        
-        cmd = "iwconfig {} essid PortableTestbed-{}".format(interface, defaultChannel)
-        os.system(cmd)
-
-        cmd = "iwconfig {} channel {}".format(interface, defaultChannel)
-        os.system(cmd)
-
-        #give some time to connect
-        time.sleep(3)
-
-        cmd = "ifconfig {} {} netmask 255.255.255.0 up".format(interface, bnIpAddress)
-        os.system(cmd)        
+    def stop_bn_node(self):
+        bnconfig.stop_olsrd()
+        bnconfig.delete_vxlan(self.bnInterface, self.dutInterface)
+        bnconfig.stop_ibss(self.bnInterface)
+        time.sleep(1)
+        bnconfig.start_network_manager()
 
     def connectToController(self):
         self.log.debug("Agent connects controller: DL:{0}, UL:{1}".format(self.controllerDL, self.controllerUL))
@@ -285,17 +280,12 @@ class Agent(object):
     def set_channel(self, msg):
         channel = msg
         self.log.info("Set channel {}".format(channel))
+        
+        self.bnChannel = channel
+        self.log.debug("Configure new channel {} for interface: {}".format(self.bnChannel, self.bnInterface))
 
-        interface = self.bnInterface
+        bnconfig.start_ibss(self.bnInterface, self.bnChannel)
 
-        self.log.debug("Configure new channel {} for interface: {}".format(channel, interface))
-
-        #change essid to prevent reconnection on old channel
-        cmd = "iwconfig {} essid PortableTestbed-{}".format(interface, channel)
-        os.system(cmd)
-
-        cmd = "iwconfig {} channel {}".format(interface, channel)
-        os.system(cmd)
         
     def monitor_transmission_parameters(self, msg):
         self.log.debug("Monitoring interface {}, parameters: {}".format(self.bnInterface, msg))
@@ -374,3 +364,4 @@ class Agent(object):
             self.dl_socket.close()
             self.ul_socket.close()
             self.context.term()
+            self.stop_bn_node()
