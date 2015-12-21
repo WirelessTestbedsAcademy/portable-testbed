@@ -70,9 +70,6 @@ class Agent(object):
         self.echoSendJob = None
         self.connectionLostJob = None 
 
-        self.start_bn_node()
-        time.sleep(2)
-
         self.poller = zmq.Poller()
         self.context = zmq.Context()
         self.dl_socket = self.context.socket(zmq.SUB) # for downlink communication with controller
@@ -83,22 +80,6 @@ class Agent(object):
 
         #register downlink socket in poller
         self.poller.register(self.dl_socket, zmq.POLLIN)
-
-    def start_bn_node(self):
-        bnconfig.stop_network_manager()
-        time.sleep(1)
-        bnconfig.load_bridge_nf()
-        bnconfig.start_ibss(self.bnInterface, self.bnChannel)
-        bnconfig.ifconfig(self.bnInterface, self.bnIpAddress, mask="255.255.255.0")
-        bnconfig.create_vxlan(self.bnInterface, self.dutInterface)
-        bnconfig.start_olsrd(self.bnInterface)
-
-    def stop_bn_node(self):
-        bnconfig.stop_olsrd()
-        bnconfig.delete_vxlan(self.bnInterface, self.dutInterface)
-        bnconfig.stop_ibss(self.bnInterface)
-        time.sleep(1)
-        bnconfig.start_network_manager()
 
     def connectToController(self):
         self.log.debug("Agent connects controller: DL:{0}, UL:{1}".format(self.controllerDL, self.controllerUL))
@@ -363,4 +344,3 @@ class Agent(object):
             self.dl_socket.close()
             self.ul_socket.close()
             self.context.term()
-            self.stop_bn_node()

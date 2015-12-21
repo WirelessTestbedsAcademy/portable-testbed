@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+start_bn_node.py: Start BN Node
+
+Usage:
+   start_bn_node.py [options] [-q | -v]
+
+Options:
+   -f                  foo
+   --config configFile config file path
+
+Other options:
+   -h, --help          show this help message and exit
+   -q, --quiet         print less text
+   -v, --verbose       print more text
+   --version           show version and exit
+"""
+
+import logging
+import wishful_agent
+import yaml
+import time
+
+__author__ = "Piotr Gawlowicz"
+__copyright__ = "Copyright (c) 2015, Technische Universität Berlin"
+__version__ = "0.1.0"
+__email__ = "gawlowicz@tkn.tu-berlin.de"
+
+
+def main(args):
+    log = logging.getLogger('wishful_agent.main')
+    log.debug(args)
+
+    config_file_path = args['--config']
+    with open(config_file_path, 'r') as f:
+        config = yaml.load(f)
+        bnInterface = config['bnInterface']
+        bnIpAddress = config['ipAddress']
+        bnMask = config['bnMask']
+        dutInterface = config['sutInterface']
+
+    wishful_agent.bnconfig.stop_network_manager()
+    time.sleep(1)
+    
+    defaultBnChannel = 11
+    wishful_agent.bnconfig.load_bridge_nf()
+    wishful_agent.bnconfig.start_ibss(bnInterface, defaultBnChannel)
+    wishful_agent.bnconfig.ifconfig(bnInterface, bnIpAddress, bnMask)
+    wishful_agent.bnconfig.create_vxlan(bnInterface, dutInterface)
+    wishful_agent.bnconfig.start_olsrd(bnInterface)
+
+if __name__ == "__main__":
+    try:
+        from docopt import docopt
+    except:
+        print("""
+        Please install docopt using:
+            pip install docopt==0.6.1
+        For more refer to:
+        https://github.com/docopt/docopt
+        """)
+        raise
+
+    args = docopt(__doc__, version=__version__)
+
+    log_level = logging.INFO  # default
+    if args['--verbose']:
+        log_level = logging.DEBUG
+    elif args['--quiet']:
+        log_level = logging.ERROR
+
+    logging.basicConfig(level=log_level,
+        format='%(asctime)s - %(name)s.%(funcName)s() - %(levelname)s - %(message)s')
+
+    main(args)

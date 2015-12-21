@@ -29,16 +29,22 @@ pip install ./tms-bnc-interface/
 
 ### 2.1 Agent:
 ```
-python ./agent/bin/simple_agent --config=./agent/bin/config.yaml
+cd ./agent/bin/
+sudo su
+./start_bn_node --config=./config.yaml
+./simple_agent --config=./config.yaml
+./stop_bn_node --config=./config.yaml
 ```
 
 ### 2.2 Controller:
 ```
-python ./controller/bin/simple_controller --config=./controller/bin/config.yaml
+cd ./controller/bin/
+./simple_controller --config=./config.yaml
 ```
 
 ### 2.3 Simple TMS:
 ```
-python ./tms-bnc-interface/bin/simple_tms
+cd ./tms-bnc-interface/bin/
+./simple_tms
 ```
 

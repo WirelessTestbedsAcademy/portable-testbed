@@ -3,7 +3,9 @@
 hostname: 'node-2'
 bnInterface : 'wlan0'
 ipAddress : '192.168.1.2'
+bnMask : "255.255.255.0"
 bnChannel : 11
+sutInterface : 'eth0'
 sutMac: '08:ed:b9:16:cd:88'
 controllerDL : 'tcp://192.168.1.1:8990'
 controllerUL : 'tcp://192.168.1.1:8989'

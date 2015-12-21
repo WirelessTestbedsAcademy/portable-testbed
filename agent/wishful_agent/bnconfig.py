@@ -83,7 +83,7 @@ def start_ibss(bn_dev, channel=11):
     os.system(cmd)
 
 def stop_ibss(bn_dev):
-    cmd = "ifconfig {} 0.0.0.0 up".format(bn_dev)
+    cmd = "ifconfig {} 0.0.0.0 down".format(bn_dev)
     os.system(cmd)
     cmd = "killall wpa_supplicant > /dev/null 2>&1".format()
     os.system(cmd)

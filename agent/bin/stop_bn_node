@@ -1,0 +1,72 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+stop_bn_node.py: Stop BN node
+
+Usage:
+   simple_agent.py [options] [-q | -v]
+
+Options:
+   -f                  foo
+   --config configFile config file path
+
+Other options:
+   -h, --help          show this help message and exit
+   -q, --quiet         print less text
+   -v, --verbose       print more text
+   --version           show version and exit
+"""
+
+import logging
+import wishful_agent
+import yaml
+import time
+
+__author__ = "Piotr Gawlowicz"
+__copyright__ = "Copyright (c) 2015, Technische Universität Berlin"
+__version__ = "0.1.0"
+__email__ = "gawlowicz@tkn.tu-berlin.de"
+
+
+def main(args):
+    log = logging.getLogger('wishful_agent.main')
+    log.debug(args)
+
+    config_file_path = args['--config']
+    with open(config_file_path, 'r') as f:
+        config = yaml.load(f)
+        bnInterface = config['bnInterface']
+        dutInterface = config['sutInterface']
+
+    wishful_agent.bnconfig.stop_olsrd()
+    wishful_agent.bnconfig.delete_vxlan(bnInterface, dutInterface)
+    wishful_agent.bnconfig.stop_ibss(bnInterface)
+    
+    time.sleep(1)
+    wishful_agent.bnconfig.start_network_manager()
+
+if __name__ == "__main__":
+    try:
+        from docopt import docopt
+    except:
+        print("""
+        Please install docopt using:
+            pip install docopt==0.6.1
+        For more refer to:
+        https://github.com/docopt/docopt
+        """)
+        raise
+
+    args = docopt(__doc__, version=__version__)
+
+    log_level = logging.INFO  # default
+    if args['--verbose']:
+        log_level = logging.DEBUG
+    elif args['--quiet']:
+        log_level = logging.ERROR
+
+    logging.basicConfig(level=log_level,
+        format='%(asctime)s - %(name)s.%(funcName)s() - %(levelname)s - %(message)s')
+
+    main(args)
