@@ -1,9 +1,9 @@
 ###Agent config file
 
-hostname: 'node-1'
+hostname: 'node-2'
 bnInterface : 'wlan0'
-ipAddress : '192.168.1.1'
+ipAddress : '192.168.1.2'
 bnChannel : 11
-sutMac: '08:ed:b9:16:cd:8f'
+sutMac: '08:ed:b9:16:cd:88'
 controllerDL : 'tcp://192.168.1.1:8990'
 controllerUL : 'tcp://192.168.1.1:8989'
