@@ -280,7 +280,6 @@ class Agent(object):
     def set_channel(self, msg):
         channel = msg
         self.log.info("Set channel {}".format(channel))
-        
         self.bnChannel = channel
         self.log.debug("Configure new channel {} for interface: {}".format(self.bnChannel, self.bnInterface))
 
